@@ -4,12 +4,10 @@ import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
+import pydirectinput
+
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
-
-INPUT_MOUSE = 0
-MOUSEEVENTF_LEFTDOWN = 0x0002
-MOUSEEVENTF_LEFTUP = 0x0004
 
 WH_MOUSE_LL = 14
 WM_LBUTTONDOWN = 0x0201
@@ -34,26 +32,6 @@ def enable_dpi_awareness() -> None:
         ctypes.windll.shcore.SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)
     except (AttributeError, OSError):
         pass
-
-
-class MOUSEINPUT(ctypes.Structure):
-    _fields_ = [
-        ("dx", ctypes.c_long),
-        ("dy", ctypes.c_long),
-        ("mouseData", ctypes.c_ulong),
-        ("dwFlags", ctypes.c_ulong),
-        ("time", ctypes.c_ulong),
-        ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
-    ]
-
-
-class INPUTUNION(ctypes.Union):
-    _fields_ = [("mi", MOUSEINPUT)]
-
-
-class INPUT(ctypes.Structure):
-    _anonymous_ = ("u",)
-    _fields_ = [("type", ctypes.c_ulong), ("u", INPUTUNION)]
 
 
 class POINT(ctypes.Structure):
@@ -356,13 +334,7 @@ class ClickerApp:
         self.status_var.set("Stopped")
 
     def _click_at(self, x: int, y: int) -> None:
-        user32.SetCursorPos(int(x), int(y))
-        extra = ctypes.c_ulong(0)
-        inputs = (INPUT * 2)()
-        for index, flags in enumerate((MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP)):
-            inputs[index].type = INPUT_MOUSE
-            inputs[index].mi = MOUSEINPUT(0, 0, 0, flags, 0, ctypes.pointer(extra))
-        user32.SendInput(2, ctypes.byref(inputs), ctypes.sizeof(INPUT))
+        pydirectinput.click(x=int(x), y=int(y))
 
     def on_close(self) -> None:
         self._stop_event.set()
