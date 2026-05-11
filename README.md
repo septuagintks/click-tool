@@ -19,10 +19,14 @@ A small Windows mouse auto-clicker with a Tkinter window.
 ## Usage
 
 - Enter the click interval in milliseconds.
-- Click **Start** to begin clicking at the current mouse position.
+- Click **Add by click**, then left-click anywhere on screen to add that position.
+- Right-click or press Esc while capturing to cancel.
+- Add multiple positions; they are clicked from top to bottom.
+- Use **Up**, **Down**, **Remove**, and **Clear** to edit the position order.
+- Click **Start** to begin clicking all saved positions in order.
 - Click **Stop** to stop immediately.
 
 ## Notes
 
-- This first version is Windows-only.
+- This version is Windows-only.
 - The app uses the standard library only.
