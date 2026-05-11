@@ -24,7 +24,7 @@ A small Windows mouse auto-clicker with a Tkinter window.
 - Add multiple positions; they are clicked from top to bottom.
 - Use **Up**, **Down**, **Remove**, and **Clear** to edit the position order.
 - Click **Start** to begin clicking all saved positions in order.
-- Click **Stop** to stop immediately.
+- Click **Stop** or press Esc to stop immediately.
 
 ## Notes
 

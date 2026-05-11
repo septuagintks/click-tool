@@ -16,6 +16,24 @@ WM_LBUTTONDOWN = 0x0201
 WM_RBUTTONDOWN = 0x0204
 WM_QUIT = 0x0012
 HC_ACTION = 0
+VK_ESCAPE = 0x1B
+
+
+PROCESS_PER_MONITOR_DPI_AWARE = 2
+DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = ctypes.c_void_p(-4)
+
+
+def enable_dpi_awareness() -> None:
+    try:
+        user32.SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
+        return
+    except (AttributeError, OSError):
+        pass
+
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)
+    except (AttributeError, OSError):
+        pass
 
 
 class MOUSEINPUT(ctypes.Structure):
@@ -72,6 +90,8 @@ user32.PostThreadMessageW.argtypes = [
     wintypes.DWORD, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
 ]
 user32.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
+user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
+user32.GetAsyncKeyState.restype = ctypes.c_short
 kernel32.GetCurrentThreadId.restype = wintypes.DWORD
 kernel32.GetModuleHandleW.restype = wintypes.HMODULE
 kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
@@ -138,6 +158,7 @@ class PositionCapture:
 
 class ClickerApp:
     def __init__(self) -> None:
+        enable_dpi_awareness()
         self.root = tk.Tk()
         self.root.title("Mouse Click Tool")
         self.root.resizable(False, False)
@@ -147,6 +168,7 @@ class ClickerApp:
         self._positions: list[tuple[int, int]] = []
         self._stop_event = threading.Event()
         self._click_thread: threading.Thread | None = None
+        self._escape_thread: threading.Thread | None = None
         self._capture: PositionCapture | None = None
 
         self._build_ui()
@@ -202,7 +224,7 @@ class ClickerApp:
         )
         ttk.Label(
             frame,
-            text="Left-click captures a position. Right-click cancels capture.",
+            text="Left-click captures a position. Right-click cancels capture. Esc stops clicking.",
             foreground="#666666",
         ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
@@ -301,12 +323,20 @@ class ClickerApp:
         self.start_button.config(state="disabled")
         self.stop_button.config(state="normal")
         self.capture_button.config(state="disabled")
+        self._escape_thread = threading.Thread(target=self._watch_escape, daemon=True)
+        self._escape_thread.start()
         self.status_var.set(
-            f"Clicking {len(positions_snapshot)} positions every {interval} ms"
+            f"Clicking {len(positions_snapshot)} positions every {interval} ms. Press Esc to stop."
         )
 
     def stop_clicking(self) -> None:
         self._stop_event.set()
+
+    def _watch_escape(self) -> None:
+        while not self._stop_event.wait(0.03):
+            if user32.GetAsyncKeyState(VK_ESCAPE) & 0x8000:
+                self._stop_event.set()
+                break
 
     def _click_loop(self, interval_ms: int, positions: list[tuple[int, int]]) -> None:
         interval_s = interval_ms / 1000.0
