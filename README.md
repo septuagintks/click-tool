@@ -10,7 +10,13 @@ A small Windows mouse auto-clicker with a Tkinter window.
    .venv\Scripts\activate
    ```
 
-2. Start the app:
+2. Install dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Start the app:
 
    ```bash
    python main.py
@@ -29,4 +35,4 @@ A small Windows mouse auto-clicker with a Tkinter window.
 ## Notes
 
 - This version is Windows-only.
-- The app uses the standard library only.
+- Clicking is sent through `pydirectinput`.
