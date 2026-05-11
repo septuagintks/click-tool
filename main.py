@@ -54,18 +54,30 @@ LowLevelMouseProc = ctypes.WINFUNCTYPE(
 
 user32.SetWindowsHookExW.restype = wintypes.HHOOK
 user32.SetWindowsHookExW.argtypes = [
-    ctypes.c_int, LowLevelMouseProc, wintypes.HINSTANCE, wintypes.DWORD,
+    ctypes.c_int,
+    LowLevelMouseProc,
+    wintypes.HINSTANCE,
+    wintypes.DWORD,
 ]
 user32.CallNextHookEx.restype = wintypes.LPARAM
 user32.CallNextHookEx.argtypes = [
-    wintypes.HHOOK, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM,
+    wintypes.HHOOK,
+    ctypes.c_int,
+    wintypes.WPARAM,
+    wintypes.LPARAM,
 ]
 user32.UnhookWindowsHookEx.argtypes = [wintypes.HHOOK]
 user32.GetMessageW.argtypes = [
-    ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT,
+    ctypes.POINTER(wintypes.MSG),
+    wintypes.HWND,
+    wintypes.UINT,
+    wintypes.UINT,
 ]
 user32.PostThreadMessageW.argtypes = [
-    wintypes.DWORD, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
+    wintypes.DWORD,
+    wintypes.UINT,
+    wintypes.WPARAM,
+    wintypes.LPARAM,
 ]
 user32.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
 user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
@@ -167,30 +179,40 @@ class ClickerApp:
 
         list_frame = ttk.Frame(frame)
         list_frame.grid(row=2, column=0, columnspan=2, sticky="ew")
-        self.position_list = tk.Listbox(list_frame, height=8, width=34, activestyle="dotbox")
+        self.position_list = tk.Listbox(
+            list_frame, height=8, width=34, activestyle="dotbox"
+        )
         self.position_list.grid(row=0, column=0)
-        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.position_list.yview)
+        scrollbar = ttk.Scrollbar(
+            list_frame, orient="vertical", command=self.position_list.yview
+        )
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.position_list.config(yscrollcommand=scrollbar.set)
 
         edit_row = ttk.Frame(frame)
         edit_row.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 0))
-        self.capture_button = ttk.Button(edit_row, text="Add by click", command=self.begin_capture)
+        self.capture_button = ttk.Button(
+            edit_row, text="Add by click", command=self.begin_capture
+        )
         self.capture_button.grid(row=0, column=0, padx=(0, 6))
-        ttk.Button(edit_row, text="Remove", command=self.remove_position).grid(row=0, column=1, padx=6)
-        ttk.Button(edit_row, text="Up", width=4, command=lambda: self.move_position(-1)).grid(
-            row=0, column=2, padx=(6, 0)
+        ttk.Button(edit_row, text="Remove", command=self.remove_position).grid(
+            row=0, column=1, padx=6
         )
-        ttk.Button(edit_row, text="Down", width=5, command=lambda: self.move_position(1)).grid(
-            row=0, column=3, padx=(4, 0)
-        )
+        ttk.Button(
+            edit_row, text="Up", width=4, command=lambda: self.move_position(-1)
+        ).grid(row=0, column=2, padx=(6, 0))
+        ttk.Button(
+            edit_row, text="Down", width=5, command=lambda: self.move_position(1)
+        ).grid(row=0, column=3, padx=(4, 0))
         ttk.Button(edit_row, text="Clear", command=self.clear_positions).grid(
             row=0, column=4, padx=(6, 0)
         )
 
         run_row = ttk.Frame(frame)
         run_row.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(12, 0))
-        self.start_button = ttk.Button(run_row, text="Start", command=self.start_clicking)
+        self.start_button = ttk.Button(
+            run_row, text="Start", command=self.start_clicking
+        )
         self.start_button.grid(row=0, column=0, padx=(0, 8))
         self.stop_button = ttk.Button(
             run_row, text="Stop", command=self.stop_clicking, state="disabled"
