@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Nuitka
+*.build/
+*.dist/
+*.onefile-build/
+*.exe
+*.bin
