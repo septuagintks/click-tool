@@ -5,6 +5,9 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 import pydirectinput
+import win32gui
+import win32api
+import win32con
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
@@ -140,11 +143,12 @@ def client_to_screen(hwnd, x, y):
 
 class DraggableDot(tk.Toplevel):
     """A semi-transparent, numbered, draggable dot that stays on top."""
-    def __init__(self, master, index, x, y, on_move, hwnd=None):
+    def __init__(self, master, index, x, y, on_move, on_click=None, hwnd=None):
         super().__init__(master)
         self.index = index  # 0-based index
         self.on_move = on_move
-        self.hwnd = hwnd # If set, x and y are relative to this window's client area
+        self.on_click = on_click
+        self.hwnd = hwnd # If set, x and y are relative to this window's top-left
         
         self.overrideredirect(True)
         self.attributes("-topmost", True)
@@ -152,8 +156,13 @@ class DraggableDot(tk.Toplevel):
         
         # Initialize position
         if self.hwnd:
-            sx, sy = client_to_screen(self.hwnd, x, y)
-            self.update_position(sx, sy)
+            rect = get_window_rect(self.hwnd)
+            if rect:
+                sx = rect[0] + x
+                sy = rect[1] + y
+                self.update_position(sx, sy)
+            else:
+                self.update_position(x, y)
         else:
             self.update_position(x, y)
         
@@ -188,6 +197,8 @@ class DraggableDot(tk.Toplevel):
 
     def _on_start(self, event):
         self._drag_data = {"x": event.x, "y": event.y}
+        if self.on_click:
+            self.on_click(self.index)
 
     def _on_drag(self, event):
         dx = event.x - self._drag_data["x"]
@@ -197,20 +208,14 @@ class DraggableDot(tk.Toplevel):
         new_screen_y = self.winfo_y() + dy + DOT_SIZE//2
         
         if self.hwnd:
-            # Get current client rect in screen coordinates
-            crect = get_client_rect(self.hwnd)
-            if crect:
-                # crect is [0, 0, width, height] relative to client area
-                # We need screen coordinates of client top-left
-                cl_tl_sx, cl_tl_sy = client_to_screen(self.hwnd, 0, 0)
-                cl_br_sx, cl_br_sy = client_to_screen(self.hwnd, crect[2], crect[3])
+            rect = get_window_rect(self.hwnd)
+            if rect:
+                # Constrain within window rect
+                new_screen_x = max(rect[0], min(new_screen_x, rect[2]))
+                new_screen_y = max(rect[1], min(new_screen_y, rect[3]))
                 
-                # Constrain new_screen_x/y within these bounds
-                new_screen_x = max(cl_tl_sx, min(new_screen_x, cl_br_sx))
-                new_screen_y = max(cl_tl_sy, min(new_screen_y, cl_br_sy))
-                
-                rel_x = new_screen_x - cl_tl_sx
-                rel_y = new_screen_y - cl_tl_sy
+                rel_x = new_screen_x - rect[0]
+                rel_y = new_screen_y - rect[1]
                 self.update_position(new_screen_x, new_screen_y)
                 self.on_move(self.index, rel_x, rel_y)
             else:
@@ -418,15 +423,16 @@ class ClickerApp:
                     if user32.IsIconic(hwnd):
                         p["dot"].withdraw()
                     else:
-                        crect = get_client_rect(hwnd)
-                        if crect:
-                            # Clamp relative coordinates to current client size
-                            cw = crect[2]
-                            ch = crect[3]
-                            p["x"] = max(0, min(p["x"], cw))
-                            p["y"] = max(0, min(p["y"], ch))
+                        rect = get_window_rect(hwnd)
+                        if rect:
+                            # Clamp relative coordinates to current window size
+                            ww = rect[2] - rect[0]
+                            wh = rect[3] - rect[1]
+                            p["x"] = max(0, min(p["x"], ww))
+                            p["y"] = max(0, min(p["y"], wh))
                             
-                            sx, sy = client_to_screen(hwnd, p["x"], p["y"])
+                            sx = rect[0] + p["x"]
+                            sy = rect[1] + p["y"]
                             p["dot"].deiconify()
                             p["dot"].update_position(sx, sy)
                         else:
@@ -516,7 +522,8 @@ class ClickerApp:
         x, y = screen_w // 2, screen_h // 2
         
         index = len(self._screen_positions)
-        dot = DraggableDot(self.root, index, x, y, self._on_screen_dot_move)
+        dot = DraggableDot(self.root, index, x, y, self._on_screen_dot_move,
+                          on_click=self._on_screen_dot_click)
         
         self._screen_positions.append({
             "x": x,
@@ -530,6 +537,14 @@ class ClickerApp:
         self.screen_list.activate(index)
         self._on_screen_list_select()
         self.status_var.set(f"Added screen dot {index+1} at center.")
+
+    def _on_screen_dot_click(self, index):
+        """Select corresponding item in list when dot is clicked."""
+        self.notebook.select(0) # Ensure screen tab is active
+        self.screen_list.selection_clear(0, "end")
+        self.screen_list.selection_set(index)
+        self.screen_list.activate(index)
+        self._on_screen_list_select()
 
     def _on_screen_dot_move(self, index, x, y):
         """Callback when a screen dot is dragged."""
@@ -616,25 +631,27 @@ class ClickerApp:
             messagebox.showinfo("Select Window", "Select a target window from the left list first.")
             return
             
-        win_data = self._target_windows[sel_win[0]]
+        win_idx = sel_win[0]
+        win_data = self._target_windows[win_idx]
         hwnd = win_data["hwnd"]
         
         if not user32.IsWindow(hwnd):
             messagebox.showerror("Window Lost", "The selected window is no longer available.")
             return
             
-        rect = get_client_rect(hwnd)
+        rect = get_window_rect(hwnd)
         if rect is None:
-            messagebox.showerror("Error", "Could not get window client position.")
+            messagebox.showerror("Error", "Could not get window position.")
             return
             
-        # Place dot at center of client area
+        # Place dot at center of window (including title bar)
         win_w = rect[2] - rect[0]
         win_h = rect[3] - rect[1]
         rel_x, rel_y = win_w // 2, win_h // 2
         
         index = len(self._window_positions)
-        dot = DraggableDot(self.root, index, rel_x, rel_y, self._on_window_dot_move, hwnd=hwnd)
+        dot = DraggableDot(self.root, index, rel_x, rel_y, self._on_window_dot_move, 
+                          on_click=self._on_window_dot_click, hwnd=hwnd)
         
         self._window_positions.append({
             "x": rel_x,
@@ -645,11 +662,21 @@ class ClickerApp:
             "win_title": win_data["title"]
         })
         self._refresh_window_pt_list()
+        
+        # Keep focus on window list as requested
+        self.target_win_list.selection_set(win_idx)
+        self.target_win_list.activate(win_idx)
+        
+        self.status_var.set(f"Added window dot {index+1} for '{win_data['title']}'.")
+
+    def _on_window_dot_click(self, index):
+        """Select corresponding item in list when dot is clicked."""
+        self.notebook.select(1) # Ensure window tab is active
         self.window_pt_list.selection_clear(0, "end")
         self.window_pt_list.selection_set(index)
         self.window_pt_list.activate(index)
+        self.window_pt_list.see(index)
         self._on_window_list_select()
-        self.status_var.set(f"Added window dot {index+1} for '{win_data['title']}'.")
 
     def _on_window_dot_move(self, index, x, y):
         """Callback when a window dot is dragged (x, y are relative)."""
@@ -841,12 +868,35 @@ class ClickerApp:
                 if mode == "window":
                     hwnd = pos["hwnd"]
                     if user32.IsWindow(hwnd):
-                        # Background click using PostMessage
-                        # Coordinates are relative to client area
-                        x, y = int(pos["x"]), int(pos["y"])
-                        lparam = (y << 16) | (x & 0xFFFF)
-                        user32.PostMessageW(hwnd, WM_LBUTTONDOWN, 1, lparam)
-                        user32.PostMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
+                        rect = get_window_rect(hwnd)
+                        if rect:
+                            # Screen coordinate of the click point
+                            sx = rect[0] + pos["x"]
+                            sy = rect[1] + pos["y"]
+                            
+                            # Screen coordinate of client area top-left
+                            cl_tl_sx, cl_tl_sy = client_to_screen(hwnd, 0, 0)
+                            
+                            # Client-relative coordinates
+                            cx = int(sx - cl_tl_sx)
+                            cy = int(sy - cl_tl_sy)
+                            
+                            # Find the actual child window at these client coordinates
+                            target_hwnd = win32gui.ChildWindowFromPoint(hwnd, (cx, cy))
+                            if not target_hwnd:
+                                target_hwnd = hwnd
+                                
+                            # Convert to target_hwnd's own client coordinates
+                            # (Important if target_hwnd is a child)
+                            t_cl_tl_sx, t_cl_tl_sy = win32gui.ClientToScreen(target_hwnd, (0, 0))
+                            tx = int(sx - t_cl_tl_sx)
+                            ty = int(sy - t_cl_tl_sy)
+                            
+                            lparam = win32api.MAKELONG(tx, ty)
+                            win32gui.PostMessage(target_hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lparam)
+                            win32gui.PostMessage(target_hwnd, win32con.WM_LBUTTONUP, 0, lparam)
+                        else:
+                            continue
                     else:
                         continue
                 else:
