@@ -544,14 +544,7 @@ class ClickerApp:
         """Open a dialog to select a window from all visible windows."""
         dialog = tk.Toplevel(self.root)
         dialog.title("Select Window (Auto-refreshing)")
-        
-        # Center dialog relative to main window
-        self.root.update_idletasks()
-        width = 400
-        height = 500
-        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (width // 2)
-        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (height // 2)
-        dialog.geometry(f"{width}x{height}+{x}+{y}")
+        dialog.geometry("400x500")
         dialog.transient(self.root)
         dialog.grab_set()
         
