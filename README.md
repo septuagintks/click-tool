@@ -38,6 +38,9 @@ A flexible Windows mouse auto-clicker with visual draggable targets. Supports bo
 ### UI & UX Improvements
 - **Optimized Focus**: Focus stays on the window list when adding dots for rapid setup.
 - **Bidirectional Selection**: Clicking a dot on the screen automatically selects its corresponding entry in the list.
+### General Features
+- **Script Management**: Export your entire setup (intervals, screen points, window targets) to a JSON file and import it later.
+- **Auto-refreshing Window List**: The "Add Window" dialog automatically updates the list of available windows.
 - **Custom Delays**: Set unique wait times for each individual click point.
 - **DPI Awareness**: Accurate positioning on high-resolution displays.
 - **Emergency Stop**: Press **Esc** at any time to stop the clicking loop.
@@ -47,10 +50,11 @@ A flexible Windows mouse auto-clicker with visual draggable targets. Supports bo
 1. **Choose Mode**: Use the tabs at the top to switch between **Screen Mode** and **Window Mode**.
 2. **Add Targets**:
    - In **Screen Mode**, click "Add Dot".
-   - In **Window Mode**, click "Add Window" to pick a target, then select it and click "Add Dot".
+   - In **Window Mode**, click "Add Window" to pick a target (the list refreshes automatically), then select it and click "Add Dot".
 3. **Position Dots**: Drag the numbered dots to your desired locations.
 4. **Configure Sequence**: Adjust the order using Up/Down buttons and set custom post-click delays.
-5. **Run**: Click **Start Loop**. Press **Esc** to stop.
+5. **Save/Load**: Use **Export Script** to save your configuration and **Import Script** to load a previously saved setup.
+6. **Run**: Click **Start Loop**. Press **Esc** to stop.
 
 ## Dependencies
 - `pydirectinput`: Used for Screen Mode hardware-level simulation.
