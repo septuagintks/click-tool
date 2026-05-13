@@ -11,6 +11,7 @@ kernel32 = ctypes.windll.kernel32
 
 WH_MOUSE_LL = 14
 WM_LBUTTONDOWN = 0x0201
+WM_LBUTTONUP = 0x0202
 WM_RBUTTONDOWN = 0x0204
 WM_QUIT = 0x0012
 HC_ACTION = 0
@@ -98,12 +99,15 @@ class RECT(ctypes.Structure):
     ]
 
 user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(RECT)]
+user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(RECT)]
 user32.IsWindow.argtypes = [wintypes.HWND]
 user32.IsWindow.restype = wintypes.BOOL
 user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
 user32.IsWindowVisible.argtypes = [wintypes.HWND]
 user32.IsWindowVisible.restype = wintypes.BOOL
 user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
 
 EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
 user32.EnumWindows.argtypes = [EnumWindowsProc, wintypes.LPARAM]
@@ -123,13 +127,24 @@ def get_window_rect(hwnd):
         return rect.left, rect.top, rect.right, rect.bottom
     return None
 
+def get_client_rect(hwnd):
+    rect = RECT()
+    if user32.GetClientRect(hwnd, ctypes.byref(rect)):
+        return rect.left, rect.top, rect.right, rect.bottom
+    return None
+
+def client_to_screen(hwnd, x, y):
+    pt = POINT(x, y)
+    user32.ClientToScreen(hwnd, ctypes.byref(pt))
+    return pt.x, pt.y
+
 class DraggableDot(tk.Toplevel):
     """A semi-transparent, numbered, draggable dot that stays on top."""
     def __init__(self, master, index, x, y, on_move, hwnd=None):
         super().__init__(master)
         self.index = index  # 0-based index
         self.on_move = on_move
-        self.hwnd = hwnd # If set, x and y are relative to this window
+        self.hwnd = hwnd # If set, x and y are relative to this window's client area
         
         self.overrideredirect(True)
         self.attributes("-topmost", True)
@@ -137,13 +152,8 @@ class DraggableDot(tk.Toplevel):
         
         # Initialize position
         if self.hwnd:
-            rect = get_window_rect(self.hwnd)
-            if rect:
-                screen_x = rect[0] + x
-                screen_y = rect[1] + y
-                self.update_position(screen_x, screen_y)
-            else:
-                self.update_position(x, y) # Fallback
+            sx, sy = client_to_screen(self.hwnd, x, y)
+            self.update_position(sx, sy)
         else:
             self.update_position(x, y)
         
@@ -185,17 +195,29 @@ class DraggableDot(tk.Toplevel):
         # winfo_x/y is top-left, we want center
         new_screen_x = self.winfo_x() + dx + DOT_SIZE//2
         new_screen_y = self.winfo_y() + dy + DOT_SIZE//2
-        self.update_position(new_screen_x, new_screen_y)
         
         if self.hwnd:
-            rect = get_window_rect(self.hwnd)
-            if rect:
-                rel_x = new_screen_x - rect[0]
-                rel_y = new_screen_y - rect[1]
+            # Get current client rect in screen coordinates
+            crect = get_client_rect(self.hwnd)
+            if crect:
+                # crect is [0, 0, width, height] relative to client area
+                # We need screen coordinates of client top-left
+                cl_tl_sx, cl_tl_sy = client_to_screen(self.hwnd, 0, 0)
+                cl_br_sx, cl_br_sy = client_to_screen(self.hwnd, crect[2], crect[3])
+                
+                # Constrain new_screen_x/y within these bounds
+                new_screen_x = max(cl_tl_sx, min(new_screen_x, cl_br_sx))
+                new_screen_y = max(cl_tl_sy, min(new_screen_y, cl_br_sy))
+                
+                rel_x = new_screen_x - cl_tl_sx
+                rel_y = new_screen_y - cl_tl_sy
+                self.update_position(new_screen_x, new_screen_y)
                 self.on_move(self.index, rel_x, rel_y)
             else:
+                self.update_position(new_screen_x, new_screen_y)
                 self.on_move(self.index, new_screen_x, new_screen_y)
         else:
+            self.update_position(new_screen_x, new_screen_y)
             self.on_move(self.index, new_screen_x, new_screen_y)
 
 
@@ -384,8 +406,8 @@ class ClickerApp:
             for p in self._window_positions: p["dot"].deiconify()
             
     def sync_dots_loop(self):
-        """Update window-based dots to follow their windows."""
-        # Only sync if we are in window mode and not clicking
+        """Update window-based dots to follow their windows and prevent overflow."""
+        # Only sync if we are not clicking
         is_clicking = self._click_thread and self._click_thread.is_alive()
         current_tab = self.notebook.index(self.notebook.select())
         
@@ -396,12 +418,19 @@ class ClickerApp:
                     if user32.IsIconic(hwnd):
                         p["dot"].withdraw()
                     else:
-                        rect = get_window_rect(hwnd)
-                        if rect:
-                            screen_x = rect[0] + p["x"]
-                            screen_y = rect[1] + p["y"]
+                        crect = get_client_rect(hwnd)
+                        if crect:
+                            # Clamp relative coordinates to current client size
+                            cw = crect[2]
+                            ch = crect[3]
+                            p["x"] = max(0, min(p["x"], cw))
+                            p["y"] = max(0, min(p["y"], ch))
+                            
+                            sx, sy = client_to_screen(hwnd, p["x"], p["y"])
                             p["dot"].deiconify()
-                            p["dot"].update_position(screen_x, screen_y)
+                            p["dot"].update_position(sx, sy)
+                        else:
+                            p["dot"].withdraw()
                 else:
                     p["dot"].withdraw()
         
@@ -594,12 +623,12 @@ class ClickerApp:
             messagebox.showerror("Window Lost", "The selected window is no longer available.")
             return
             
-        rect = get_window_rect(hwnd)
-        if not rect:
-            messagebox.showerror("Error", "Could not get window position.")
+        rect = get_client_rect(hwnd)
+        if rect is None:
+            messagebox.showerror("Error", "Could not get window client position.")
             return
             
-        # Place dot at center of window
+        # Place dot at center of client area
         win_w = rect[2] - rect[0]
         win_h = rect[3] - rect[1]
         rel_x, rel_y = win_w // 2, win_h // 2
@@ -808,25 +837,21 @@ class ClickerApp:
             for pos in positions:
                 if self._stop_event.is_set():
                     break
-                
-                target_x, target_y = pos["x"], pos["y"]
-                
+
                 if mode == "window":
                     hwnd = pos["hwnd"]
                     if user32.IsWindow(hwnd):
-                        rect = get_window_rect(hwnd)
-                        if rect:
-                            target_x += rect[0]
-                            target_y += rect[1]
-                        else:
-                            # Skip if window rect unavailable
-                            continue
+                        # Background click using PostMessage
+                        # Coordinates are relative to client area
+                        x, y = int(pos["x"]), int(pos["y"])
+                        lparam = (y << 16) | (x & 0xFFFF)
+                        user32.PostMessageW(hwnd, WM_LBUTTONDOWN, 1, lparam)
+                        user32.PostMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
                     else:
-                        # Skip if window closed
                         continue
-                
-                self._click_at(target_x, target_y)
-                
+                else:
+                    self._click_at(pos["x"], pos["y"])
+
                 # Determine wait time: per-step delay or global interval
                 delay_ms = pos["delay"] if pos["delay"] is not None else global_interval_ms
                 wait_s = delay_ms / 1000.0

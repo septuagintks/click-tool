@@ -1,6 +1,6 @@
-# click-tool
+# Click Tool
 
-A small Windows mouse auto-clicker with a Tkinter window.
+A flexible Windows mouse auto-clicker with visual draggable targets. Supports both screen-wide and window-specific clicking modes.
 
 ## Run
 
@@ -10,7 +10,7 @@ A small Windows mouse auto-clicker with a Tkinter window.
    .venv\Scripts\activate
    ```
 
-2. Install dependencies:
+2. Install dependencies (requires `pywin32`):
 
    ```bash
    pip install -r requirements.txt
@@ -22,21 +22,34 @@ A small Windows mouse auto-clicker with a Tkinter window.
    python main.py
    ```
 
+## Features
+
+### 1. Screen Mode (Original)
+- **Global Coordinates**: Set click points anywhere on the screen.
+- **Draggable Targets**: Visually position numbered dots.
+
+### 2. Window Mode (New!)
+- **Target Windows**: Select one or more specific windows to click within.
+- **Background Clicking**: Uses Windows messages (`PostMessage`) to click windows even when they are not in the foreground.
+- **Smart Constraints**: Draggable dots are locked within the window's client area and follow the window as it moves or resizes.
+- **Cross-Window Sequencing**: Create a complex sequence of clicks spanning across different windows.
+
+### General Features
+- **Custom Delays**: Set unique wait times for each individual click point.
+- **DPI Awareness**: Accurate positioning on high-resolution displays.
+- **Emergency Stop**: Press **Esc** at any time to stop the clicking loop.
+
 ## Usage
 
-1.  **Set Interval**: Enter the global click interval in milliseconds at the top.
-2.  **Add Positions**:
-    *   Click **Add Dot** to generate a semi-transparent draggable dot in the center of the screen.
-    *   Drag the dot to your desired click target. The number on the dot indicates its order in the sequence.
-3.  **Manage List**:
-    *   Use **Up**, **Down**, and **Remove** to adjust the order or delete positions.
-    *   **Wait after (ms)**: Select a position in the list and enter a millisecond value to set a custom wait time *after* that specific click. If left empty, it defaults to the global interval.
-4.  **Run**:
-    *   Click **Start Loop** to begin clicking. The dots will automatically hide during the loop.
-    *   Press **Esc** or click **Stop** to end the sequence.
+1. **Choose Mode**: Use the tabs at the top to switch between **Screen Mode** and **Window Mode**.
+2. **Add Targets**:
+   - In **Screen Mode**, click "Add Dot".
+   - In **Window Mode**, click "Add Window" to pick a target, then select it and click "Add Dot".
+3. **Position Dots**: Drag the numbered dots to your desired locations. In Window Mode, dots will follow their respective windows.
+4. **Configure Sequence**: Adjust the order using Up/Down buttons and set custom post-click delays if needed.
+5. **Run**: Click **Start Loop**. Press **Esc** to stop.
 
-## Notes
-
-- This version is Windows-only.
-- Clicking is performed via `pydirectinput` with a small hold duration for better compatibility with games and UI elements.
-- The app is DPI-aware to ensure dots align correctly with screen coordinates.
+## Dependencies
+- `pydirectinput`: Used for Screen Mode hardware-level simulation.
+- `pywin32`: Used for Window Mode background messaging and window management.
+- `tkinter`: Standard GUI library.
