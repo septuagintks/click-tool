@@ -2,7 +2,8 @@ import ctypes
 from ctypes import wintypes
 import threading
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
+import json
 
 import pydirectinput
 import win32gui
@@ -283,7 +284,10 @@ class ClickerApp:
         self.start_button = ttk.Button(run_row, text="Start Loop", command=self.start_clicking)
         self.start_button.grid(row=0, column=0, padx=(0, 8))
         self.stop_button = ttk.Button(run_row, text="Stop", command=self.stop_clicking, state="disabled")
-        self.stop_button.grid(row=0, column=1)
+        self.stop_button.grid(row=0, column=1, padx=(0, 8))
+        
+        ttk.Button(run_row, text="Import Script", command=self.import_script).grid(row=0, column=2, padx=(8, 0))
+        ttk.Button(run_row, text="Export Script", command=self.export_script).grid(row=0, column=3, padx=(4, 0))
 
         ttk.Label(bottom_frame, textvariable=self.status_var, foreground="#005a9e", font=("", 9, "bold")).grid(
             row=2, column=0, columnspan=2, sticky="w", pady=(12, 0)
@@ -445,7 +449,7 @@ class ClickerApp:
     def add_target_window(self):
         """Open a dialog to select a window from all visible windows."""
         dialog = tk.Toplevel(self.root)
-        dialog.title("Select Window")
+        dialog.title("Select Window (Auto-refreshing)")
         dialog.geometry("400x500")
         dialog.transient(self.root)
         dialog.grab_set()
@@ -462,27 +466,48 @@ class ClickerApp:
         scroll.pack(side="right", fill="y")
         lb.config(yscrollcommand=scroll.set)
         
-        windows = []
-        def enum_callback(hwnd, lparam):
-            if user32.IsWindowVisible(hwnd):
-                title = get_window_title(hwnd)
-                if title:
-                    windows.append((hwnd, title))
-            return True
+        current_windows = []
+        
+        def refresh_list():
+            if not dialog.winfo_exists():
+                return
+                
+            nonlocal current_windows
+            new_windows = []
+            def enum_callback(hwnd, lparam):
+                if user32.IsWindowVisible(hwnd):
+                    title = get_window_title(hwnd)
+                    if title:
+                        new_windows.append((hwnd, title))
+                return True
+                
+            enum_proc = EnumWindowsProc(enum_callback)
+            user32.EnumWindows(enum_proc, 0)
+            new_windows.sort(key=lambda x: x[1].lower())
             
-        self._enum_proc = EnumWindowsProc(enum_callback)
-        user32.EnumWindows(self._enum_proc, 0)
-        
-        # Sort by title
-        windows.sort(key=lambda x: x[1].lower())
-        
-        for hwnd, title in windows:
-            lb.insert("end", title)
+            # Update only if changed to preserve selection if possible
+            if new_windows != current_windows:
+                sel = lb.curselection()
+                selected_hwnd = current_windows[sel[0]][0] if sel else None
+                
+                lb.delete(0, "end")
+                for hwnd, title in new_windows:
+                    lb.insert("end", title)
+                    if hwnd == selected_hwnd:
+                        new_idx = lb.size() - 1
+                        lb.selection_set(new_idx)
+                        lb.activate(new_idx)
+                
+                current_windows = new_windows
+            
+            dialog.after(1000, refresh_list)
+            
+        refresh_list()
             
         def on_select():
             sel = lb.curselection()
             if sel:
-                hwnd, title = windows[sel[0]]
+                hwnd, title = current_windows[sel[0]]
                 # Check if already in list
                 if any(w["hwnd"] == hwnd for w in self._target_windows):
                     messagebox.showinfo("Already Added", "This window is already in your target list.")
@@ -920,6 +945,126 @@ class ClickerApp:
     def _click_at(self, x: int, y: int) -> None:
         """Move and click with a small duration for better compatibility."""
         pydirectinput.click(x=int(x), y=int(y), duration=0.05)
+
+    def export_script(self):
+        """Save the current configuration to a JSON file."""
+        data = {
+            "global_interval": self.interval_var.get(),
+            "screen_positions": [
+                {"x": p["x"], "y": p["y"], "delay": p["delay"]}
+                for p in self._screen_positions
+            ],
+            "target_windows": [w["title"] for w in self._target_windows],
+            "window_positions": [
+                {
+                    "x": p["x"],
+                    "y": p["y"],
+                    "delay": p["delay"],
+                    "win_title": p["win_title"]
+                }
+                for p in self._window_positions
+            ]
+        }
+        
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Export Script"
+        )
+        if file_path:
+            try:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=4, ensure_ascii=False)
+                messagebox.showinfo("Export Successful", f"Script saved to {file_path}")
+            except Exception as e:
+                messagebox.showerror("Export Error", f"Failed to save script: {e}")
+
+    def import_script(self):
+        """Load configuration from a JSON file."""
+        file_path = filedialog.askopenfilename(
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Import Script"
+        )
+        if not file_path:
+            return
+            
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            messagebox.showerror("Import Error", f"Failed to read script: {e}")
+            return
+            
+        # Clear existing
+        self.clear_screen_positions()
+        self.clear_window_positions()
+        self._target_windows.clear()
+        
+        # Restore global interval
+        self.interval_var.set(data.get("global_interval", "500"))
+        
+        # Restore screen positions
+        for p_data in data.get("screen_positions", []):
+            idx = len(self._screen_positions)
+            dot = DraggableDot(self.root, idx, p_data["x"], p_data["y"], self._on_screen_dot_move,
+                              on_click=self._on_screen_dot_click)
+            self._screen_positions.append({
+                "x": p_data["x"],
+                "y": p_data["y"],
+                "delay": p_data.get("delay"),
+                "dot": dot
+            })
+        self._refresh_screen_list()
+        
+        # Restore target windows and re-find HWNDs
+        all_active_windows = []
+        def enum_callback(hwnd, lparam):
+            if user32.IsWindowVisible(hwnd):
+                title = get_window_title(hwnd)
+                if title:
+                    all_active_windows.append((hwnd, title))
+            return True
+        user32.EnumWindows(EnumWindowsProc(enum_callback), 0)
+        
+        missing_windows = []
+        for win_title in data.get("target_windows", []):
+            # Find HWND by title
+            found_hwnd = next((h for h, t in all_active_windows if t == win_title), None)
+            if found_hwnd:
+                self._target_windows.append({"hwnd": found_hwnd, "title": win_title})
+            else:
+                missing_windows.append(win_title)
+        
+        self._refresh_window_list()
+        
+        # Restore window positions
+        for p_data in data.get("window_positions", []):
+            win_title = p_data["win_title"]
+            found_hwnd = next((w["hwnd"] for w in self._target_windows if w["title"] == win_title), None)
+            
+            # Even if hwnd not found, we keep the data but dot will be hidden/dummy if hwnd is None
+            idx = len(self._window_positions)
+            dot = DraggableDot(self.root, idx, p_data["x"], p_data["y"], self._on_window_dot_move,
+                              on_click=self._on_window_dot_click, hwnd=found_hwnd)
+            
+            self._window_positions.append({
+                "x": p_data["x"],
+                "y": p_data["y"],
+                "delay": p_data.get("delay"),
+                "dot": dot,
+                "hwnd": found_hwnd,
+                "win_title": win_title
+            })
+        self._refresh_window_pt_list()
+        
+        if missing_windows:
+            messagebox.showwarning(
+                "Missing Windows",
+                "The following windows could not be found and their points may not work correctly:\n\n" + 
+                "\n".join(missing_windows)
+            )
+        
+        self.status_var.set(f"Imported script from {file_path}")
 
     def on_close(self) -> None:
         self._stop_event.set()
