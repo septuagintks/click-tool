@@ -40,7 +40,7 @@ A flexible Windows mouse auto-clicker with visual draggable targets. Supports bo
 - **Bidirectional Selection**: Clicking a dot on the screen automatically selects its corresponding entry in the list.
 ### General Features
 - **Loop Toggle**: Choose between continuous looping or a single execution of your click sequence.
-- **Script Management**: Export your entire setup (intervals, screen points, window targets) to a JSON file and import it later.
+- **Script Management**: Export your entire setup (intervals, screen points, window targets, loop state) to a JSON file and import it later.
 - **Auto-refreshing Window List**: The "Add Window" dialog automatically updates the list of available windows.
 - **Custom Delays**: Set unique wait times for each individual click point.
 - **DPI Awareness**: Accurate positioning on high-resolution displays.

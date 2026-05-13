@@ -961,6 +961,7 @@ class ClickerApp:
         """Save the current configuration to a JSON file."""
         data = {
             "global_interval": self.interval_var.get(),
+            "loop": self.loop_var.get(),
             "screen_positions": [
                 {"x": p["x"], "y": p["y"], "delay": p["delay"]}
                 for p in self._screen_positions
@@ -1013,6 +1014,7 @@ class ClickerApp:
         
         # Restore global interval
         self.interval_var.set(data.get("global_interval", "500"))
+        self.loop_var.set(data.get("loop", True))
         
         # Restore screen positions
         for p_data in data.get("screen_positions", []):
